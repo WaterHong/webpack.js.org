@@ -20,7 +20,7 @@ related:
 
 Multiple separate builds should form a single application. These separate builds should not have dependencies between each other, so they can be developed and deployed individually.
 
-一个应用可能由多个独立构建的模块所组成。这些模块可以单独构建，不依赖于其他模块，因此可以单独开发和部署。
+一个应用可能由多个独立构建的模块所组成。这些模块可以单独构建、不依赖于其他模块，因此可以单独开发和部署。
 
 This is often known as Micro-Frontends, but is not limited to that.
 
@@ -32,39 +32,73 @@ This is often known as Micro-Frontends, but is not limited to that.
 
 We distinguish between local and remote modules. Local modules are normal modules which are part of the current build. Remote modules are modules that are not part of the current build and loaded from a so-called container at the runtime.
 
+首先需要区分本地模块和远程模块。本地模块属于当前构建的一部分，远程模块则不需要构建（FIXME），而是在运行时再去加载到应用中。
+
 Loading remote modules is considered asynchronous operation. When using a remote module these asynchronous operations will be placed in the next chunk loading operation(s) that is between the remote module and the entrypoint. It's not possible to use a remote module without a chunk loading operation.
 
+加载远程模块被认为是一个异步操作。当使用远程模块时，这些异步操作将被放置在远程模块和入口点之间的下一个块加载操作中。如果没有加载到模块，则无法使用远程模块。
+
 A chunk loading operation is usually an `import()` call, but older constructs like `require.ensure` or `require([...])` are supported as well.
+
+通常用`import()` 来加载模块，同时也兼容`require.ensure` 或者 `require([...])`。
 
 A container is created through a container entry, which exposes asynchronous access to the specific modules. The exposed access is separated into two steps:
 
 1. loading the module (asynchronous)
 2. evaluating the module (synchronous).
 
+1. 加载模块（异步）
+2. 执行模块（同步）（FIXME）
+
 Step 1 will be done during the chunk loading. Step 2 will be done during the module evaluation interleaved with other (local and remote) modules. This way, evaluation order is unaffected by converting a module from local to remote or the other way around.
+
+步骤一在加载期间完成。第二部
 
 It is possible to nest a container. Containers can use modules from other containers. Circular dependencies between container are also possible.
 
+容器是可以嵌套的。一个容器可以包含其他的容器。容器间彼此依赖是有可能的。（FIXME）
+
 ### Overriding
+
+### 可覆盖
 
 A container is able to flag selected local modules as "overridable". A consumer of the container is able to provide "overrides", which are modules that replace one of the overridable modules of the container. All modules of the container will use the replacement module instead of the local module when the consumer provides one. When the consumer doesn't provide a replacement module, all modules of the container will use the local one.
 
+容器能够将选定的本地模块标记为“可重写”。容器的使用者拥有“替代”能力，使得模块可以被另一个模块覆盖。当使用者提供容器时，容器的所有模块都将使用替换模块而不是本地模块。（FIXME）当使用者不提供替换模块时，容器的所有模块都将使用本地模块。
+
 The container will manage overridable modules in a way that they do not need to be downloaded when they have been overridden by the consumer. This usually happens by placing them into separate chunks.
+
+容器可以以某种方式进行模块替代，被替代的模块无需再下载。这通常是通过将它们放在单独的块中来实现的。（FIXME）
 
 On the other hand, the provider of the replacement modules, will only provide asynchronous loading functions. It allows the container to load replacement modules only when they are needed. The provider will manage replacement modules in a way that they do not need to be downloaded at all when they are not requested by the container. This usually happens by placing them into separate chunks.
 
+从另一个方面来说，替换的模块只能异步加载。它允许容器只有在需要的时候才去加载模块。当容器不需要这个模块时，根本不需要去下载。这通常是通过将它们放在单独的块中来实现的。
+
 A "name" is used to identify overridable modules from the container.
 
+容器内的模块用"name"来区分。
+
 Overrides are provided in a similar way as the container exposes modules, separated into two steps:
+
+覆盖模块的方式与容器暴露模块的方式类似，分为两个步骤：
 
 1. Loading (asynchronous)
 2. evaluating (asynchronous)
 
+1. 加载（异步）
+2. 解析（异步）
+
 W> When nesting is used, providing overrides to one container will automatically override the modules with the same "name" in the nested container(s).
+
+当使用嵌套时，container中替代的模块将会取代原有的相同的"name"模块。
 
 Overrides must be provided before the modules of the container are loaded. Overridables that are used in initial chunk, can only be overridden by a synchronous module override that doesn't use Promises. Once evaluated, overridables are no longer overridable.
 
+在container的模块被加载之前必须提供Overrides（？），初始块中使用的可覆盖对象只能由不使用Promises的同步模块覆盖来覆盖。一旦解析了，可覆盖对象就不再可覆盖。
+
 ## High-level concepts
+
+## 高阶概念
 
 Each build acts as a container and also consumes other builds as containers. This way each build is able to access any other exposed module by loading it from its container.
 
@@ -117,6 +151,8 @@ This plugin combines `ContainerPlugin` and `ContainerReferencePlugin`. Overrides
 
 ## Concept goals
 
+## 概念目标
+
 - It should be possible to expose and use any module type that webpack supports.
 - Chunk loading should load everything needed in parallel (web: single round-trip to server).
 - Control from consumer to container
@@ -136,17 +172,42 @@ This plugin combines `ContainerPlugin` and `ContainerReferencePlugin`. Overrides
     - Could provide and consume multiple different version when you have nested node_modules.
 - Module requests with trailing `/` in shared will match all module requests with this prefix.
 
+- 可公开和使用任何webpack支持的模块
+- 块加载应该并行加载所有所需的内容
+- 从消费者到容器的控制
+  - 模块的覆盖是一个单向操作
+  - 同级模块不能覆盖同级模块
+- 共享中的相对请求和绝对请求
+  - 即使不使用，也会提供
+  - 将相对于`config.context`解析
+  - 默认不使用`requiredVersion`
+- 共享中的模块请求
+  - 在使用时才会提供
+  - 将匹配构建中所有使用的相等模块请求
+  - 将提供所有匹配的模块
+  - 将在package.json中提取`requiredVersion`
+  - 当嵌套node_modules时，可以提供和使用多个不同的版本
+  - 共享中带有尾部“ /”的模块请求将匹配所有带有此前缀的模块请求
+  
 ## Use cases
 
+## 使用案例
+
 ### Separate builds per page
+
+### 每页单独构建
 
 Each page of a Single Page Application is exposed from container build in a separate build. The application shell is also a separate build referencing all pages as remote modules. This way each page can be separately deployed. The application shell is deployed when routes are updated or new routes are added. The application shell defines commonly used libraries as shared modules to avoid duplication of them in the page builds.
 
 ### Components library as container
 
+### 组件库作为容器
+
 Many applications share a common components library which could be built as a container with each component exposed. Each application consumes components from the components library container. Changes to the components library can be separately deployed without the need to re-deploy all applications. The application automatically uses the up-to-date version of the components library.
 
 ## Troubleshooting
+
+## 故障排除
 
 __`Uncaught Error: Shared module is not available for eager consumption`__
 
